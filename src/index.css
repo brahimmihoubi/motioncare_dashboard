@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+/* Enable class-based dark mode for Tailwind v4 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Ensure html and body fill the viewport for proper dark bg coverage */
+html, body, #root {
+  min-height: 100%;
+}

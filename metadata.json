@@ -1,0 +1,6 @@
+{
+  "name": "MotionCare Rehabilitation Assistant",
+  "description": "An interactive, high-fidelity clinical rehabilitation assistant dashboard for patient tracking, schedule management, and exercise analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
