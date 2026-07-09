@@ -66,7 +66,7 @@ export default function Sidebar({
     >
       {/* ── Brand Header ── */}
       <div className="px-4 pt-5 pb-3 flex items-center justify-between gap-2 shrink-0">
-        <div className="w-12 h-12 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center shrink-0 overflow-hidden shadow-sm border border-slate-100 dark:border-slate-700">
+        <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shrink-0 overflow-hidden shadow-sm border border-slate-100">
           <img
             src={motionCareLogo}
             alt="MotionCare"
