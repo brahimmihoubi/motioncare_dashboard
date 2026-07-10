@@ -10,7 +10,7 @@ export interface Patient {
   name: string;
   avatar: string;
   age: number;
-  gender: 'Male' | 'Female';
+  gender: 'Male' | 'Female' | 'Unknown';
   condition: string;
   program: string;
   lastSessionDate: string;

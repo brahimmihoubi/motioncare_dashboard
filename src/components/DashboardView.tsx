@@ -34,6 +34,15 @@ interface DashboardViewProps {
   schedule: ScheduleItem[];
   recentSessions: RecentSession[];
   doctorName: string;
+  dashboardStats: {
+    totalPatients: number;
+    totalSessions: number;
+    completedSessions: number;
+    missedSessions: number;
+    complianceRate: number;
+    totalDoctors: number;
+  } | null;
+  isLoadingData?: boolean;
   onAddPatientClick: () => void;
   onAddScheduleClick: () => void;
   onViewPatient: (patient: Patient) => void;
@@ -46,6 +55,8 @@ export default function DashboardView({
   patients,
   schedule,
   recentSessions,
+  dashboardStats,
+  isLoadingData = false,
   doctorName,
   onAddPatientClick,
   onAddScheduleClick,
@@ -218,7 +229,7 @@ export default function DashboardView({
 
       {/* 2. Top Metrics Grid (6 columns) */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {/* Metric 1 */}
+        {/* Metric 1 - Total Patients (real) */}
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-2xl p-4.5 shadow-2xs hover:shadow-sm transition-all space-y-3.5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-400 tracking-tight">Total Patients</span>
@@ -227,89 +238,101 @@ export default function DashboardView({
             </div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">{patients.length}</div>
-            <div className="text-[10px] text-emerald-600 font-bold mt-1 flex items-center gap-0.5">
-              <span>↑ 5 this month</span>
+            <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">
+              {isLoadingData ? <span className="animate-pulse text-slate-300">...</span> : (dashboardStats?.totalPatients ?? patients.length)}
+            </div>
+            <div className="text-[10px] text-slate-400 font-bold mt-1 flex items-center gap-0.5">
+              <span>{dashboardStats ? `${dashboardStats.totalDoctors} doctor(s)` : 'Loading...'}</span>
             </div>
           </div>
         </div>
 
-        {/* Metric 2 */}
+        {/* Metric 2 - Total Sessions (real) */}
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-2xl p-4.5 shadow-2xs hover:shadow-sm transition-all space-y-3.5">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400 tracking-tight">Sessions Today</span>
+            <span className="text-xs font-bold text-slate-400 tracking-tight">Total Sessions</span>
             <div className="p-2 bg-cyan-50 text-cyan-600 rounded-xl shrink-0">
               <Calendar className="w-4 h-4" />
             </div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">{schedule.length + 14}</div>
-            <div className="text-[10px] text-emerald-600 font-bold mt-1 flex items-center gap-0.5">
-              <span>↑ 3 from yesterday</span>
+            <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">
+              {isLoadingData ? <span className="animate-pulse text-slate-300">...</span> : (dashboardStats?.totalSessions ?? '—')}
+            </div>
+            <div className="text-[10px] text-slate-400 font-bold mt-1 flex items-center gap-0.5">
+              <span>All time</span>
             </div>
           </div>
         </div>
 
-        {/* Metric 3 */}
+        {/* Metric 3 - Completed Sessions (real) */}
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-2xl p-4.5 shadow-2xs hover:shadow-sm transition-all space-y-3.5">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400 tracking-tight">Completed Sessions</span>
+            <span className="text-xs font-bold text-slate-400 tracking-tight">Completed</span>
             <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl shrink-0">
               <CheckCircle className="w-4 h-4" />
             </div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">16</div>
-            <div className="text-[10px] text-slate-400 font-bold mt-1 flex items-center gap-0.5">
-              <span>89% completion rate</span>
+            <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">
+              {isLoadingData ? <span className="animate-pulse text-slate-300">...</span> : (dashboardStats?.completedSessions ?? '—')}
+            </div>
+            <div className="text-[10px] text-emerald-600 font-bold mt-1 flex items-center gap-0.5">
+              <span>{dashboardStats && dashboardStats.totalSessions > 0 ? `${((dashboardStats.completedSessions / dashboardStats.totalSessions) * 100).toFixed(0)}% rate` : 'No data'}</span>
             </div>
           </div>
         </div>
 
-        {/* Metric 4 */}
+        {/* Metric 4 - Missed Sessions (real) */}
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-2xl p-4.5 shadow-2xs hover:shadow-sm transition-all space-y-3.5">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400 tracking-tight">Missed Sessions</span>
+            <span className="text-xs font-bold text-slate-400 tracking-tight">Missed</span>
             <div className="p-2 bg-red-50 text-red-600 rounded-xl shrink-0">
               <AlertTriangle className="w-4 h-4" />
             </div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">2</div>
+            <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">
+              {isLoadingData ? <span className="animate-pulse text-slate-300">...</span> : (dashboardStats?.missedSessions ?? '—')}
+            </div>
             <div className="text-[10px] text-red-600 font-bold mt-1 flex items-center gap-0.5">
-              <span>↓ 1 from yesterday</span>
+              <span>{dashboardStats && dashboardStats.totalSessions > 0 ? `${((dashboardStats.missedSessions / dashboardStats.totalSessions) * 100).toFixed(0)}% of total` : 'No data'}</span>
             </div>
           </div>
         </div>
 
-        {/* Metric 5 */}
+        {/* Metric 5 - Compliance Rate (real) */}
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-2xl p-4.5 shadow-2xs hover:shadow-sm transition-all space-y-3.5">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400 tracking-tight">Active Programs</span>
+            <span className="text-xs font-bold text-slate-400 tracking-tight">Compliance</span>
             <div className="p-2 bg-sky-50 text-sky-600 rounded-xl shrink-0">
               <Briefcase className="w-4 h-4" />
             </div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">35</div>
+            <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">
+              {isLoadingData ? <span className="animate-pulse text-slate-300">...</span> : (dashboardStats ? `${dashboardStats.complianceRate}%` : '—')}
+            </div>
             <div className="text-[10px] text-emerald-600 font-bold mt-1 flex items-center gap-0.5">
-              <span>↑ 4 this month</span>
+              <span>Overall rate</span>
             </div>
           </div>
         </div>
 
-        {/* Metric 6 */}
+        {/* Metric 6 - Active Patients */}
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80 rounded-2xl p-4.5 shadow-2xs hover:shadow-sm transition-all space-y-3.5">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400 tracking-tight">Avg. Session Time</span>
+            <span className="text-xs font-bold text-slate-400 tracking-tight">Active Patients</span>
             <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl shrink-0">
               <Clock className="w-4 h-4" />
             </div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">28 <span className="text-sm font-semibold">min</span></div>
+            <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">
+              {isLoadingData ? <span className="animate-pulse text-slate-300">...</span> : patients.filter(p => p.status === 'Active').length}
+            </div>
             <div className="text-[10px] text-emerald-600 font-bold mt-1 flex items-center gap-0.5">
-              <span>↑ 5 min from last month</span>
+              <span>in the system</span>
             </div>
           </div>
         </div>
@@ -501,28 +524,30 @@ export default function DashboardView({
                   strokeWidth="8"
                   fill="transparent"
                   strokeDasharray={2 * Math.PI * 45}
-                  strokeDashoffset={2 * Math.PI * 45 * (1 - 0.87)}
+                  strokeDashoffset={2 * Math.PI * 45 * (1 - (dashboardStats ? dashboardStats.complianceRate / 100 : 0))}
                   strokeLinecap="round"
                 />
               </svg>
               <div className="absolute text-center">
-                <div className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">87%</div>
+                <div className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">
+                  {dashboardStats ? `${dashboardStats.complianceRate}%` : '—'}
+                </div>
               </div>
             </div>
 
-            <div className="text-emerald-600 font-bold text-[10px] text-center">
-              ↑ 12% from last month
+            <div className="text-slate-500 font-bold text-[10px] text-center">
+              {dashboardStats && dashboardStats.totalSessions > 0 ? `${dashboardStats.completedSessions} of ${dashboardStats.totalSessions} sessions` : 'No sessions yet'}
             </div>
           </div>
 
           <div className="space-y-1.5 pt-3 border-t border-slate-50">
             <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-cyan-500" />Completed</span>
-              <span className="text-slate-700 dark:text-slate-200 font-bold">87%</span>
+              <span className="text-slate-700 dark:text-slate-200 font-bold">{dashboardStats ? `${dashboardStats.complianceRate}%` : '—'}</span>
             </div>
             <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-400" />Missed</span>
-              <span className="text-slate-700 dark:text-slate-200 font-bold">13%</span>
+              <span className="text-slate-700 dark:text-slate-200 font-bold">{dashboardStats ? `${(100 - dashboardStats.complianceRate).toFixed(2)}%` : '—'}</span>
             </div>
           </div>
         </div>
