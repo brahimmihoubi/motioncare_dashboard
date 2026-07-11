@@ -3,195 +3,266 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
-import { Briefcase, Clock, Users, Plus, Star, BookOpen, AlertCircle, X } from 'lucide-react';
-import { PROGRAMS_LIST } from '../mockData';
+import React, { useState, useEffect } from 'react';
+import { Briefcase, Plus, Search, CheckCircle, XCircle, Trash2, X, User, Activity } from 'lucide-react';
+import { DataService } from '../services/api';
+import { socketService } from '../services/socket';
 
 export default function ProgramsView() {
-  const [programs, setPrograms] = useState(PROGRAMS_LIST);
+  const [programs, setPrograms] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [newProg, setNewProg] = useState({
-    name: '',
-    description: '',
-    duration: '8 weeks',
-    patientCount: 0,
-    exercises: ''
-  });
+  const [newProg, setNewProg] = useState({ name: '', patient_id: '', doctor_id: '' });
+  const [patients, setPatients] = useState<any[]>([]);
+  const [doctors, setDoctors] = useState<any[]>([]);
 
-  const handleAddProgram = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newProg.name || !newProg.description) {
-      alert('Please fill in the program name and description.');
-      return;
+  const loadAll = async () => {
+    try {
+      setIsLoading(true);
+      const [progRes, patRes, docRes] = await Promise.all([
+        DataService.getAdminPrograms().catch(() => ({ data: [] })),
+        DataService.getAdminPatients().catch(() => ({ data: [] })),
+        DataService.getDoctors().catch(() => ({ data: [] })),
+      ]);
+      if (progRes?.data) setPrograms(progRes.data);
+      if (patRes?.data) setPatients(patRes.data);
+      if (docRes?.data) setDoctors(docRes.data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
     }
-    const exercisesArray = newProg.exercises
-      ? newProg.exercises.split(',').map((x) => x.trim())
-      : ['General Mobilization'];
+  };
 
-    const added = {
-      id: `prog-${Date.now()}`,
-      name: newProg.name,
-      description: newProg.description,
-      duration: newProg.duration,
-      patientCount: 0,
-      exercises: exercisesArray
+  useEffect(() => { loadAll(); }, []);
+
+  useEffect(() => {
+    const handleProgramChange = () => {
+      console.log('Real-time program update received! Refreshing list...');
+      loadAll();
     };
 
-    setPrograms([...programs, added]);
-    setIsAddOpen(false);
-    setNewProg({ name: '', description: '', duration: '8 weeks', patientCount: 0, exercises: '' });
+    socketService.on('program:created', handleProgramChange);
+    socketService.on('program:updated', handleProgramChange);
+    socketService.on('program:deleted', handleProgramChange);
+
+    return () => {
+      socketService.off('program:created', handleProgramChange);
+      socketService.off('program:updated', handleProgramChange);
+      socketService.off('program:deleted', handleProgramChange);
+    };
+  }, []);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProg.name || !newProg.patient_id || !newProg.doctor_id) {
+      alert('Please fill in all fields.');
+      return;
+    }
+    try {
+      await DataService.createProgram({
+        name: newProg.name,
+        patient_id: parseInt(newProg.patient_id),
+        doctor_id: parseInt(newProg.doctor_id),
+      });
+      setIsAddOpen(false);
+      setNewProg({ name: '', patient_id: '', doctor_id: '' });
+      await loadAll();
+    } catch (e: any) {
+      alert(e?.response?.data?.message || 'Failed to create program.');
+    }
   };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Delete this program?')) return;
+    try {
+      await DataService.deleteProgram(id);
+      setPrograms(prev => prev.filter((p: any) => p.id !== id));
+    } catch (e) {
+      alert('Failed to delete program.');
+    }
+  };
+
+  const filtered = programs.filter((p: any) =>
+    (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (p.patientName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (p.doctorName || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Therapy Programs</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Design multi-week rehabilitation programs and track student cohorts</p>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <Briefcase className="w-6 h-6 text-cyan-600" />
+            Therapy Programs
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+            All rehabilitation programs created across the system
+          </p>
         </div>
         <button
           onClick={() => setIsAddOpen(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+          className="flex items-center gap-2 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-all"
         >
           <Plus className="w-4 h-4" />
           Create Program
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {programs.map((prog) => (
-          <div key={prog.id} className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-sm hover:shadow-md transition-all p-6 flex flex-col justify-between gap-4">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="inline-flex px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-cyan-50 text-cyan-700 border border-cyan-100/30">
-                  Clinical Pathway
-                </span>
-                <div className="flex items-center gap-1 text-xs text-slate-400 font-semibold">
-                  <Star className="w-3.5 h-3.5 text-amber-400 fill-current" />
-                  Highly Effective
-                </div>
-              </div>
-
-              <div>
-                <h2 className="text-md font-bold text-slate-800 dark:text-slate-100">{prog.name}</h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed font-medium">
-                  {prog.description}
-                </p>
-              </div>
-
-              <div className="flex gap-4 pt-2">
-                <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-semibold">
-                  <Clock className="w-4 h-4 text-slate-400" />
-                  <span>Duration: {prog.duration}</span>
-                </div>
-                <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-semibold">
-                  <Users className="w-4 h-4 text-slate-400" />
-                  <span>Enrollment: {prog.patientCount} active</span>
-                </div>
-              </div>
+      {/* Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[
+          { label: 'Total Programs', value: programs.length, icon: Briefcase, color: 'text-cyan-600 bg-cyan-50 dark:bg-cyan-900/30' },
+          { label: 'Active Programs', value: programs.filter((p: any) => p.active).length, icon: CheckCircle, color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30' },
+          { label: 'Inactive Programs', value: programs.filter((p: any) => !p.active).length, icon: XCircle, color: 'text-rose-500 bg-rose-50 dark:bg-rose-900/30' },
+        ].map(stat => (
+          <div key={stat.label} className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${stat.color}`}>
+              <stat.icon className="w-5 h-5" />
             </div>
-
-            <div className="pt-4 border-t border-slate-50">
-              <h3 className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Prescribed Routine List</h3>
-              <div className="flex flex-wrap gap-1.5">
-                {prog.exercises.map((ex) => (
-                  <span
-                    key={ex}
-                    className="px-2.5 py-1 bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-semibold rounded-lg"
-                  >
-                    {ex}
-                  </span>
-                ))}
-              </div>
+            <div>
+              <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{stat.value}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{stat.label}</p>
             </div>
           </div>
         ))}
       </div>
 
+      {/* Search */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <input
+          type="text"
+          placeholder="Search programs…"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          className="w-full pl-9 pr-4 py-2.5 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/40 text-slate-700 dark:text-slate-200"
+        />
+      </div>
+
+      {/* Table */}
+      <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
+        {isLoading ? (
+          <div className="py-20 text-center text-slate-400">
+            <div className="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            Loading programs…
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-20 text-center text-slate-400 space-y-2">
+            <Briefcase className="w-10 h-10 mx-auto opacity-30" />
+            <p className="text-sm font-medium">{searchQuery ? 'No programs match your search.' : 'No programs found.'}</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-100 dark:border-slate-700">
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Program</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Patient</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Doctor</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Exercises</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Created</th>
+                  <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                {filtered.map((prog: any) => (
+                  <tr key={prog.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-700/30 transition-colors">
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center shrink-0">
+                          <Briefcase className="w-4 h-4 text-cyan-600" />
+                        </div>
+                        <span className="font-semibold text-slate-800 dark:text-slate-100">{prog.name || '—'}</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                        <User className="w-3.5 h-3.5 text-slate-400" />
+                        {prog.patientName || '—'}
+                      </div>
+                    </td>
+                    <td className="px-5 py-3.5 text-slate-600 dark:text-slate-300">
+                      {prog.doctorName ? `Dr. ${prog.doctorName}` : '—'}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs font-semibold rounded-full">
+                        <Activity className="w-3 h-3" />
+                        {prog.exerciseCount ?? 0} exercises
+                      </span>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {prog.active ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-xs font-semibold rounded-full">
+                          <CheckCircle className="w-3 h-3" /> Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 text-xs font-semibold rounded-full">
+                          <XCircle className="w-3 h-3" /> Inactive
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5 text-xs text-slate-500 dark:text-slate-400">
+                      {prog.created_at ? new Date(prog.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                    </td>
+                    <td className="px-5 py-3.5 text-right">
+                      <button onClick={() => handleDelete(prog.id)} title="Delete"
+                        className="w-8 h-8 inline-flex items-center justify-center rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 text-red-500 transition-colors">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Create Modal */}
       {isAddOpen && (
-        <div className="fixed inset-0 bg-slate-900/45 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="px-6 py-4.5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50">
-              <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">Create Rehabilitation Program</h2>
-              <button
-                onClick={() => setIsAddOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:bg-slate-700 transition-all cursor-pointer"
-              >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md border border-slate-100 dark:border-slate-700">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-700">
+              <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">Create Program</h2>
+              <button onClick={() => setIsAddOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
-
-            <form onSubmit={handleAddProgram} className="p-6 space-y-4">
+            <form onSubmit={handleCreate} className="p-5 space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Program Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Hip Flexor Mobilization Clinic"
-                  value={newProg.name}
-                  onChange={(e) => setNewProg({ ...newProg, name: e.target.value })}
-                  className="w-full px-3.5 py-2 text-xs border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10 transition-all"
-                />
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Program Name *</label>
+                <input type="text" required value={newProg.name} onChange={e => setNewProg(f => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. Knee Rehabilitation Phase 1"
+                  className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/40 text-slate-700 dark:text-slate-200" />
               </div>
-
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Description *</label>
-                <textarea
-                  required
-                  rows={3}
-                  placeholder="Detail recovery milestones, age limits, and biomechanical targets..."
-                  value={newProg.description}
-                  onChange={(e) => setNewProg({ ...newProg, description: e.target.value })}
-                  className="w-full px-3.5 py-2 text-xs border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10 resize-none transition-all"
-                />
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Patient *</label>
+                <select required value={newProg.patient_id} onChange={e => setNewProg(f => ({ ...f, patient_id: e.target.value }))}
+                  className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/40 text-slate-700 dark:text-slate-200">
+                  <option value="">Select patient…</option>
+                  {patients.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Prescribed Duration</label>
-                  <select
-                    value={newProg.duration}
-                    onChange={(e) => setNewProg({ ...newProg, duration: e.target.value })}
-                    className="w-full px-3.5 py-2 text-xs border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10 bg-white dark:bg-slate-800 transition-all"
-                  >
-                    <option value="4 weeks">4 weeks</option>
-                    <option value="8 weeks">8 weeks</option>
-                    <option value="12 weeks">12 weeks</option>
-                    <option value="16 weeks">16 weeks</option>
-                    <option value="24 weeks">24 weeks</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Target Cohort</label>
-                  <div className="px-3 py-2 border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400 text-xs rounded-xl font-medium">
-                    0 initial patients
-                  </div>
-                </div>
-              </div>
-
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Exercises (comma-separated)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Quad Sets, Heel Slides, Knee Extension"
-                  value={newProg.exercises}
-                  onChange={(e) => setNewProg({ ...newProg, exercises: e.target.value })}
-                  className="w-full px-3.5 py-2 text-xs border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10 transition-all"
-                />
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Assigned Doctor *</label>
+                <select required value={newProg.doctor_id} onChange={e => setNewProg(f => ({ ...f, doctor_id: e.target.value }))}
+                  className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/40 text-slate-700 dark:text-slate-200">
+                  <option value="">Select doctor…</option>
+                  {doctors.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
               </div>
-
-              <div className="flex gap-3 justify-end pt-2 border-t border-slate-100 dark:border-slate-700">
-                <button
-                  type="button"
-                  onClick={() => setIsAddOpen(false)}
-                  className="px-4.5 py-2 rounded-xl text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 dark:bg-slate-700/50 transition-colors cursor-pointer"
-                >
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setIsAddOpen(false)}
+                  className="flex-1 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors cursor-pointer"
-                >
+                <button type="submit"
+                  className="flex-1 py-2.5 text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 rounded-xl transition-colors">
                   Create Program
                 </button>
               </div>

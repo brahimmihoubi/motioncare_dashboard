@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import {
   LayoutDashboard,
   Users,
+  UserCog,
   Briefcase,
   Activity,
   Calendar,
@@ -46,6 +47,7 @@ export default function Sidebar({
   const menuItems = [
     { id: 'dashboard' as SidebarTab, label: 'Dashboard',      icon: LayoutDashboard },
     { id: 'patients'  as SidebarTab, label: 'Patients',       icon: Users },
+    { id: 'doctors'   as SidebarTab, label: 'Doctors',        icon: UserCog },
     { id: 'programs'  as SidebarTab, label: 'Programs',       icon: Briefcase },
     { id: 'exercises' as SidebarTab, label: 'Exercises',      icon: Activity },
     { id: 'sessions'  as SidebarTab, label: 'Sessions',       icon: Calendar },

@@ -3,232 +3,272 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
-import { CalendarDays, Plus, Clock, Users, CheckCircle, Video, Trash2, X, AlertCircle } from 'lucide-react';
-import { Patient, ScheduleItem } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Calendar, Plus, CheckCircle, XCircle, Clock, Trash2, X, User, Search } from 'lucide-react';
+import { DataService } from '../services/api';
+import { socketService } from '../services/socket';
 
-interface SessionsViewProps {
-  schedule: ScheduleItem[];
-  patients: Patient[];
-  onAddSchedule: (schedule: Omit<ScheduleItem, 'id'>) => void;
-  onDeleteSchedule: (id: string) => void;
-}
-
-export default function SessionsView({
-  schedule,
-  patients,
-  onAddSchedule,
-  onDeleteSchedule
-}: SessionsViewProps) {
+export default function SessionsView() {
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    patientId: '',
-    timeRange: '9:00 AM - 9:30 AM',
-    program: 'Knee Rehab'
-  });
+  const [patients, setPatients] = useState<any[]>([]);
+  const [programs, setPrograms] = useState<any[]>([]);
+  const [form, setForm] = useState({ patient_id: '', program_id: '', status: 'completed', duration: '30' });
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const loadAll = async () => {
+    try {
+      setIsLoading(true);
+      const [sessRes, patRes, progRes] = await Promise.all([
+        DataService.getRecentSessions(200).catch(() => ({ data: [] })),
+        DataService.getAdminPatients().catch(() => ({ data: [] })),
+        DataService.getAdminPrograms().catch(() => ({ data: [] })),
+      ]);
+      if (sessRes?.data) setSessions(sessRes.data);
+      if (patRes?.data) setPatients(patRes.data);
+      if (progRes?.data) setPrograms(progRes.data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => { loadAll(); }, []);
+
+  useEffect(() => {
+    const handleSessionChange = () => {
+      console.log('Real-time session update received! Refreshing list...');
+      loadAll();
+    };
+
+    socketService.on('session:created', handleSessionChange);
+    socketService.on('session:updated', handleSessionChange);
+    socketService.on('session:deleted', handleSessionChange);
+
+    return () => {
+      socketService.off('session:created', handleSessionChange);
+      socketService.off('session:updated', handleSessionChange);
+      socketService.off('session:deleted', handleSessionChange);
+    };
+  }, []);
+
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.patientId) {
-      alert('Please select a patient.');
+    if (!form.patient_id || !form.program_id) {
+      alert('Please select a patient and a program.');
       return;
     }
-    const matchedPatient = patients.find((p) => p.id === formData.patientId);
-    if (!matchedPatient) return;
-
-    onAddSchedule({
-      patientId: matchedPatient.id,
-      patientName: matchedPatient.name,
-      patientAvatar: matchedPatient.avatar,
-      timeRange: formData.timeRange,
-      program: formData.program,
-      status: 'Session'
-    });
-
-    setIsAddOpen(false);
-    setFormData({ patientId: '', timeRange: '9:00 AM - 9:30 AM', program: 'Knee Rehab' });
+    setIsSaving(true);
+    try {
+      await DataService.createSession({
+        patient_id: parseInt(form.patient_id),
+        program_id: parseInt(form.program_id),
+        status: form.status,
+        duration: parseInt(form.duration) || 30,
+      });
+      setIsAddOpen(false);
+      setForm({ patient_id: '', program_id: '', status: 'completed', duration: '30' });
+      await loadAll();
+    } catch (e: any) {
+      alert(e?.response?.data?.message || 'Failed to create session.');
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Delete this session?')) return;
+    try {
+      await DataService.deleteSession(id);
+      setSessions(prev => prev.filter((s: any) => s.id !== id));
+    } catch (e) {
+      alert('Failed to delete session.');
+    }
+  };
+
+  const filtered = sessions.filter((s: any) =>
+    (s.patientName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (s.programName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (s.status || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const statusConfig: Record<string, { label: string; icon: any; classes: string }> = {
+    completed: { label: 'Completed', icon: CheckCircle, classes: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' },
+    missed: { label: 'Missed', icon: XCircle, classes: 'bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-300' },
+    pending: { label: 'Pending', icon: Clock, classes: 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' },
+  };
+
+  const completedCount = sessions.filter((s: any) => s.status === 'completed').length;
+  const missedCount = sessions.filter((s: any) => s.status === 'missed').length;
+  const pendingCount = sessions.filter((s: any) => s.status === 'pending').length;
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Therapy Appointments</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Track and schedule active clinical rehabilitation session slots</p>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <Calendar className="w-6 h-6 text-cyan-600" />
+            Sessions
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+            All therapy sessions recorded across the system
+          </p>
         </div>
-        <button
-          onClick={() => setIsAddOpen(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
-        >
+        <button onClick={() => setIsAddOpen(true)}
+          className="flex items-center gap-2 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-all">
           <Plus className="w-4 h-4" />
-          Schedule Session
+          Log Session
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        {/* Left Side: Dynamic Schedule Cards */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-sm p-6">
-            <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-4">Upcoming Clinical Sessions Today</h2>
-            <div className="space-y-3">
-              {schedule.length === 0 ? (
-                <div className="py-12 text-center text-slate-400 font-medium">
-                  <AlertCircle className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  No sessions scheduled for today. Click "Schedule Session" above to add one.
-                </div>
-              ) : (
-                schedule.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/70 transition-all"
-                  >
-                    <div className="flex items-center gap-4">
-                      <img
-                        src={item.patientAvatar}
-                        alt={item.patientName}
-                        referrerPolicy="no-referrer"
-                        className="w-10 h-10 rounded-full object-cover border border-slate-200 dark:border-slate-600 shadow-xs"
-                      />
-                      <div>
-                        <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm">{item.patientName}</h3>
-                        <div className="flex items-center gap-3 text-xs text-slate-400 font-semibold mt-1">
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5 text-slate-400" />
-                            {item.timeRange}
-                          </span>
-                          <span className="text-slate-200">•</span>
-                          <span className="text-cyan-600">{item.program}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] font-bold rounded-lg uppercase tracking-wider">
-                        {item.status}
-                      </span>
-                      <button
-                        title="Delete Schedule Slot"
-                        onClick={() => onDeleteSchedule(item.id)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
+      {/* Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        {[
+          { label: 'Total Sessions', value: sessions.length, color: 'text-cyan-600 bg-cyan-50 dark:bg-cyan-900/30', icon: Calendar },
+          { label: 'Completed', value: completedCount, color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30', icon: CheckCircle },
+          { label: 'Missed', value: missedCount, color: 'text-rose-500 bg-rose-50 dark:bg-rose-900/30', icon: XCircle },
+          { label: 'Pending', value: pendingCount, color: 'text-amber-600 bg-amber-50 dark:bg-amber-900/30', icon: Clock },
+        ].map(stat => (
+          <div key={stat.label} className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${stat.color}`}>
+              <stat.icon className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{stat.value}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{stat.label}</p>
             </div>
           </div>
-        </div>
-
-        {/* Right Side: Virtual Rehabilitation Platform Info */}
-        <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-sm p-6 space-y-6">
-          <div className="p-4 bg-cyan-50/50 border border-cyan-100/50 rounded-xl space-y-2">
-            <h3 className="text-xs font-bold text-cyan-800 flex items-center gap-1.5">
-              <Video className="w-4 h-4 text-cyan-600" />
-              Tele-Rehab Hub
-            </h3>
-            <p className="text-xs text-cyan-900/80 leading-relaxed font-medium">
-              Conduct secure HD video rehabilitation sessions directly through the clinical dashboard. Track joint motion angles in real-time.
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Scheduling Guidelines</h3>
-            <ul className="text-xs text-slate-600 dark:text-slate-300 space-y-2 font-medium">
-              <li className="flex gap-2">
-                <CheckCircle className="w-4.5 h-4.5 text-emerald-500 shrink-0" />
-                <span>Verify patient range of motion limits before the video call.</span>
-              </li>
-              <li className="flex gap-2">
-                <CheckCircle className="w-4.5 h-4.5 text-emerald-500 shrink-0" />
-                <span>Keep sessions limited to 30 mins to avoid joint muscle fatigue.</span>
-              </li>
-              <li className="flex gap-2">
-                <CheckCircle className="w-4.5 h-4.5 text-emerald-500 shrink-0" />
-                <span>Log final flexion degrees in the patient file immediately post-session.</span>
-              </li>
-            </ul>
-          </div>
-        </div>
+        ))}
       </div>
 
-      {/* SCHEDULE MODAL */}
+      {/* Search */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <input type="text" placeholder="Search by patient, program, status…" value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          className="w-full pl-9 pr-4 py-2.5 text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/40 text-slate-700 dark:text-slate-200" />
+      </div>
+
+      {/* Table */}
+      <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
+        {isLoading ? (
+          <div className="py-20 text-center text-slate-400">
+            <div className="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            Loading sessions…
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-20 text-center text-slate-400 space-y-2">
+            <Calendar className="w-10 h-10 mx-auto opacity-30" />
+            <p className="text-sm font-medium">{searchQuery ? 'No sessions match.' : 'No sessions recorded yet.'}</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-100 dark:border-slate-700">
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Patient</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Program</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Duration</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</th>
+                  <th className="text-right px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                {filtered.map((s: any) => {
+                  const cfg = statusConfig[s.status] || statusConfig.pending;
+                  const Icon = cfg.icon;
+                  return (
+                    <tr key={s.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-700/30 transition-colors">
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-2">
+                          <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span className="font-medium text-slate-800 dark:text-slate-100">{s.patientName || '—'}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-slate-600 dark:text-slate-300">{s.programName || '—'}</td>
+                      <td className="px-5 py-3.5">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full ${cfg.classes}`}>
+                          <Icon className="w-3 h-3" />
+                          {cfg.label}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-slate-500 dark:text-slate-400 text-xs">
+                        {s.duration ? `${s.duration} min` : '—'}
+                      </td>
+                      <td className="px-5 py-3.5 text-xs text-slate-500 dark:text-slate-400">
+                        {s.date ? new Date(s.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        <button onClick={() => handleDelete(s.id)} title="Delete"
+                          className="w-8 h-8 inline-flex items-center justify-center rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 text-red-500 transition-colors">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Create Modal */}
       {isAddOpen && (
-        <div className="fixed inset-0 bg-slate-900/45 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-xl max-w-sm w-full overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="px-6 py-4.5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50">
-              <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">Book Therapy Slot</h2>
-              <button
-                onClick={() => setIsAddOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:bg-slate-700 transition-all cursor-pointer"
-              >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md border border-slate-100 dark:border-slate-700">
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-700">
+              <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">Log a Session</h2>
+              <button onClick={() => setIsAddOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400">
                 <X className="w-4 h-4" />
               </button>
             </div>
-
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleCreate} className="p-5 space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Select Patient *</label>
-                <select
-                  required
-                  value={formData.patientId}
-                  onChange={(e) => setFormData({ ...formData, patientId: e.target.value })}
-                  className="w-full px-3.5 py-2 text-xs border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10 bg-white dark:bg-slate-800 transition-all"
-                >
-                  <option value="">-- Choose Patient --</option>
-                  {patients.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.id})
-                    </option>
-                  ))}
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Patient *</label>
+                <select required value={form.patient_id} onChange={e => setForm(f => ({ ...f, patient_id: e.target.value }))}
+                  className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/40 text-slate-700 dark:text-slate-200">
+                  <option value="">Select patient…</option>
+                  {patients.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </div>
-
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Scheduled Time Slot</label>
-                <select
-                  value={formData.timeRange}
-                  onChange={(e) => setFormData({ ...formData, timeRange: e.target.value })}
-                  className="w-full px-3.5 py-2 text-xs border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10 bg-white dark:bg-slate-800 transition-all"
-                >
-                  <option value="9:00 AM - 9:30 AM">9:00 AM - 9:30 AM</option>
-                  <option value="10:00 AM - 10:30 AM">10:00 AM - 10:30 AM</option>
-                  <option value="11:00 AM - 11:30 AM">11:00 AM - 11:30 AM</option>
-                  <option value="1:00 PM - 1:30 PM">1:00 PM - 1:30 PM</option>
-                  <option value="2:00 PM - 2:30 PM">2:00 PM - 2:30 PM</option>
-                  <option value="3:00 PM - 3:30 PM">3:00 PM - 3:30 PM</option>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Program *</label>
+                <select required value={form.program_id} onChange={e => setForm(f => ({ ...f, program_id: e.target.value }))}
+                  className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/40 text-slate-700 dark:text-slate-200">
+                  <option value="">Select program…</option>
+                  {programs.map((p: any) => <option key={p.id} value={p.id}>{p.name} {p.patientName ? `(${p.patientName})` : ''}</option>)}
                 </select>
               </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Program Focus</label>
-                <select
-                  value={formData.program}
-                  onChange={(e) => setFormData({ ...formData, program: e.target.value })}
-                  className="w-full px-3.5 py-2 text-xs border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10 bg-white dark:bg-slate-800 transition-all"
-                >
-                  <option value="Knee Rehab">Knee Rehab</option>
-                  <option value="Post ACL Reconstruction">Post ACL Reconstruction</option>
-                  <option value="Leg Strengthening">Leg Strengthening</option>
-                  <option value="Neuromuscular Rehab">Neuromuscular Rehab</option>
-                  <option value="Core Stability">Core Stability</option>
-                </select>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Status</label>
+                  <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}
+                    className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/40 text-slate-700 dark:text-slate-200">
+                    <option value="completed">Completed</option>
+                    <option value="missed">Missed</option>
+                    <option value="pending">Pending</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Duration (min)</label>
+                  <input type="number" min="1" max="300" value={form.duration} onChange={e => setForm(f => ({ ...f, duration: e.target.value }))}
+                    className="w-full px-3 py-2.5 text-sm bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-cyan-400/40 text-slate-700 dark:text-slate-200" />
+                </div>
               </div>
-
-              <div className="flex gap-3 justify-end pt-2 border-t border-slate-100 dark:border-slate-700">
-                <button
-                  type="button"
-                  onClick={() => setIsAddOpen(false)}
-                  className="px-4.5 py-2 rounded-xl text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 dark:bg-slate-700/50 transition-colors cursor-pointer"
-                >
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setIsAddOpen(false)}
+                  className="flex-1 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors cursor-pointer"
-                >
-                  Book Session
+                <button type="submit" disabled={isSaving}
+                  className="flex-1 py-2.5 text-sm font-semibold text-white bg-cyan-600 hover:bg-cyan-700 rounded-xl transition-colors disabled:opacity-60">
+                  {isSaving ? 'Saving…' : 'Log Session'}
                 </button>
               </div>
             </form>

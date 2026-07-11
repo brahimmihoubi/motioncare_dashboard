@@ -26,13 +26,15 @@ import { Patient, StatusType } from '../types';
 
 interface PatientsViewProps {
   patients: Patient[];
-  onAddPatient: (patient: Omit<Patient, 'id'>) => void;
-  onUpdatePatient: (patient: Patient) => void;
+  doctors?: {id: number, name: string}[];
+  onAddPatient: (patient: any) => void;
+  onUpdatePatient: (patient: any) => void;
   onDeletePatient: (id: string) => void;
 }
 
 export default function PatientsView({
   patients,
+  doctors = [],
   onAddPatient,
   onUpdatePatient,
   onDeletePatient
@@ -56,7 +58,9 @@ export default function PatientsView({
     status: 'Active' as StatusType,
     email: '',
     phone: '',
-    notes: ''
+    notes: '',
+    doctor_id: '',
+    password: ''
   });
 
   // Pagination
@@ -98,7 +102,9 @@ export default function PatientsView({
       status: 'Active',
       email: '',
       phone: '',
-      notes: ''
+      notes: '',
+      doctor_id: doctors.length > 0 ? String(doctors[0].id) : '',
+      password: 'password123' // default for admin creation
     });
     setIsAddOpen(true);
   };
@@ -112,20 +118,11 @@ export default function PatientsView({
     }
     onAddPatient({
       name: formData.name,
-      avatar: formData.gender === 'Male'
-        ? 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&q=80&w=120&h=120'
-        : 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=120&h=120',
-      age: parseInt(formData.age) || 10,
-      gender: formData.gender,
-      condition: formData.condition,
-      program: formData.program,
-      lastSessionDate: 'May 12, 2024',
-      lastSessionTime: '12:00 PM',
-      status: formData.status,
       email: formData.email || `${formData.name.toLowerCase().replace(/\s+/g, '')}@example.com`,
-      phone: formData.phone || '+20 100 000 0000',
-      joinDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      notes: formData.notes
+      password: formData.password || 'password123',
+      age: parseInt(formData.age) || 10,
+      notes: formData.notes,
+      doctor_id: formData.doctor_id ? parseInt(formData.doctor_id) : null
     });
     setIsAddOpen(false);
   };
@@ -142,7 +139,9 @@ export default function PatientsView({
       status: patient.status,
       email: patient.email,
       phone: patient.phone,
-      notes: patient.notes || ''
+      notes: patient.notes || '',
+      doctor_id: '',
+      password: ''
     });
     setIsEditOpen(true);
   };
@@ -154,14 +153,9 @@ export default function PatientsView({
     onUpdatePatient({
       ...editingPatient,
       name: formData.name,
-      gender: formData.gender,
       age: parseInt(formData.age) || 10,
-      condition: formData.condition,
-      program: formData.program,
-      status: formData.status,
-      email: formData.email,
-      phone: formData.phone,
-      notes: formData.notes
+      notes: formData.notes,
+      doctor_id: formData.doctor_id ? parseInt(formData.doctor_id) : null
     });
     if (selectedPatient && selectedPatient.id === editingPatient.id) {
       setSelectedPatient({
@@ -602,6 +596,20 @@ export default function PatientsView({
                 </div>
 
                 <div>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Assign Doctor</label>
+                  <select
+                    value={formData.doctor_id}
+                    onChange={(e) => setFormData({ ...formData, doctor_id: e.target.value })}
+                    className="w-full px-3.5 py-2 text-sm border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10 bg-white dark:bg-slate-800 transition-all"
+                  >
+                    <option value="">No Doctor</option>
+                    {doctors.map(d => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Status</label>
                   <select
                     value={formData.status}
@@ -743,6 +751,20 @@ export default function PatientsView({
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     className="w-full px-3.5 py-2 text-sm border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10 transition-all"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Assign Doctor</label>
+                  <select
+                    value={formData.doctor_id}
+                    onChange={(e) => setFormData({ ...formData, doctor_id: e.target.value })}
+                    className="w-full px-3.5 py-2 text-sm border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10 bg-white dark:bg-slate-800 transition-all"
+                  >
+                    <option value="">No Doctor</option>
+                    {doctors.map(d => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>

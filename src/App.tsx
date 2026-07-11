@@ -8,15 +8,17 @@ import { Menu } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import DashboardView from './components/DashboardView';
 import PatientsView from './components/PatientsView';
+import DoctorsView from './components/DoctorsView';
 import ExercisesView from './components/ExercisesView';
 import ProgramsView from './components/ProgramsView';
 import SessionsView from './components/SessionsView';
 import AnalyticsView from './components/AnalyticsView';
 import SupportCenterView from './components/SupportCenterView';
 import SettingsView from './components/SettingsView';
-import { SidebarTab, Patient, ScheduleItem, RecentSession } from './types';
+import { SidebarTab, Patient, RecentSession } from './types';
 import LoginView from './components/LoginView';
 import { AuthService, DataService } from './services/api';
+import { socketService } from './services/socket';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(AuthService.isAuthenticated());
@@ -41,7 +43,6 @@ export default function App() {
 
   // Shared Central State — start empty, fill from API
   const [patients, setPatients] = useState<Patient[]>([]);
-  const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
   const [recentSessions, setRecentSessions] = useState<RecentSession[]>([]);
   const [dashboardStats, setDashboardStats] = useState<{
     totalPatients: number;
@@ -51,14 +52,13 @@ export default function App() {
     complianceRate: number;
     totalDoctors: number;
   } | null>(null);
+  const [doctors, setDoctors] = useState<{id: number, name: string}[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
 
-  // Load ALL data from API concurrently
-  useEffect(() => {
+  const loadDashboardData = () => {
     if (!isAuthenticated) return;
     setIsLoadingData(true);
 
-    // Avatar fallbacks by index for variety
     const avatars = [
       'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=120&h=120',
       'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=120&h=120',
@@ -74,21 +74,29 @@ export default function App() {
       DataService.getAdminPatients().catch(() => ({ data: [] })),
       DataService.getDashboardStats().catch(() => ({ data: null })),
       DataService.getRecentSessions(10).catch(() => ({ data: [] })),
-    ]).then(([patientsRes, statsRes, sessionsRes]) => {
-      // --- Map Patients ---
+      DataService.getDoctors().catch(() => ({ data: [] }))
+    ]).then(([patientsRes, statsRes, sessionsRes, doctorsRes]) => {
+      if (Array.isArray(doctorsRes?.data)) {
+        setDoctors(doctorsRes.data.map((d: any) => ({ id: d.id, name: d.name })));
+      }
       const rawPatients = Array.isArray(patientsRes?.data) ? patientsRes.data : [];
       if (rawPatients.length > 0) {
         const mappedPatients: Patient[] = rawPatients.map((p: any, idx: number) => ({
           id: `MC-${String(p.id).padStart(5, '0')}`,
+          rawId: p.id,
           name: p.name || 'Unknown Patient',
           avatar: avatars[idx % avatars.length],
           age: p.age || 0,
           gender: 'Unknown' as const,
-          condition: 'General Rehab',
-          program: 'Assigned Program',
-          lastSessionDate: 'N/A',
-          lastSessionTime: 'N/A',
-          status: 'Active' as const,
+          condition: p.doctorName ? `Dr. ${p.doctorName}` : 'Unassigned',
+          program: p.programName || 'No Program',
+          lastSessionDate: p.lastSessionDate
+            ? new Date(p.lastSessionDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : 'No sessions yet',
+          lastSessionTime: p.lastSessionDate
+            ? new Date(p.lastSessionDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+            : '—',
+          status: (p.lastSessionStatus === 'missed' ? 'Inactive' : 'Active') as 'Active' | 'Inactive',
           email: p.email || '',
           phone: 'N/A',
           joinDate: p.created_at
@@ -99,12 +107,10 @@ export default function App() {
         setPatients(mappedPatients);
       }
 
-      // --- Map Stats ---
       if (statsRes?.data) {
         setDashboardStats(statsRes.data);
       }
 
-      // --- Map Recent Sessions ---
       const rawSessions = Array.isArray(sessionsRes?.data) ? sessionsRes.data : [];
       if (rawSessions.length > 0) {
         const mappedSessions: RecentSession[] = rawSessions.map((s: any, idx: number) => ({
@@ -127,6 +133,34 @@ export default function App() {
     }).finally(() => {
       setIsLoadingData(false);
     });
+  };
+
+  // Connect socket and listen for live updates
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    
+    loadDashboardData();
+    socketService.connect();
+
+    const handleDataChanged = () => {
+      console.log('Real-time update received! Refreshing dashboard data...');
+      loadDashboardData();
+    };
+
+    const events = [
+      'patient:created', 'patient:updated', 'patient:deleted',
+      'doctor:created', 'doctor:updated', 'doctor:deleted',
+      'session:created', 'session:updated', 'session:deleted',
+      'program:created', 'program:updated', 'program:deleted',
+      'exercise:created', 'exercise:updated', 'exercise:deleted'
+    ];
+
+    events.forEach(event => socketService.on(event, handleDataChanged));
+
+    return () => {
+      events.forEach(event => socketService.off(event, handleDataChanged));
+      socketService.disconnect();
+    };
   }, [isAuthenticated]);
 
   // Doctor credentials state
@@ -142,67 +176,65 @@ export default function App() {
   // --- CRUD Callback Handlers ---
   
   // Add Patient
-  const handleAddPatient = (newPatient: Omit<Patient, 'id'>) => {
-    const nextIdNumber = patients.length > 0 
-      ? Math.max(...patients.map(p => parseInt(p.id.replace('MC-', '')) || 0)) + 1 
-      : 18;
-    const padId = String(nextIdNumber).padStart(5, '0');
-    const fullPatient: Patient = {
-      ...newPatient,
-      id: `MC-${padId}`
-    };
-
-    setPatients([fullPatient, ...patients]);
-
-    // Also add a quick recent session log placeholder
-    setRecentSessions([
-      {
-        id: `RS-${Date.now()}`,
-        patientName: fullPatient.name,
-        patientAvatar: fullPatient.avatar,
-        programName: fullPatient.program,
-        date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        time: 'Pending',
-        status: 'Checked'
-      },
-      ...recentSessions
-    ]);
+  const handleAddPatient = async (newPatient: any) => {
+    try {
+      await DataService.createPatient(newPatient);
+      // Refresh patients list after adding
+      const patientsRes = await DataService.getAdminPatients();
+      const rawPatients = Array.isArray(patientsRes?.data) ? patientsRes.data : [];
+      const avatars = [
+        'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=120&h=120',
+        'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=120&h=120',
+      ];
+      setPatients(rawPatients.map((p: any, idx: number) => ({
+        id: `MC-${String(p.id).padStart(5, '0')}`,
+        name: p.name || 'Unknown',
+        avatar: avatars[idx % avatars.length],
+        age: p.age || 0,
+        gender: 'Unknown',
+        condition: 'General Rehab',
+        program: 'Assigned',
+        lastSessionDate: 'N/A',
+        lastSessionTime: 'N/A',
+        status: 'Active',
+        email: p.email || '',
+        phone: 'N/A',
+        joinDate: p.created_at ? new Date(p.created_at).toLocaleDateString() : new Date().toLocaleDateString(),
+        notes: p.notes || '',
+        // store raw ID for API operations
+        rawId: p.id
+      })));
+    } catch (e) {
+      console.error(e);
+      alert('Failed to add patient');
+    }
   };
 
   // Update Patient
-  const handleUpdatePatient = (updatedPatient: Patient) => {
-    setPatients(patients.map((p) => (p.id === updatedPatient.id ? updatedPatient : p)));
-    
-    // Propagate rename to schedules or sessions
-    setSchedule(
-      schedule.map((s) => 
-        s.patientId === updatedPatient.id 
-          ? { ...s, patientName: updatedPatient.name, patientAvatar: updatedPatient.avatar } 
-          : s
-      )
-    );
+  const handleUpdatePatient = async (updatedPatient: any) => {
+    try {
+      await DataService.updatePatient(updatedPatient.rawId, updatedPatient);
+      setPatients(patients.map((p: any) => (p.rawId === updatedPatient.rawId ? updatedPatient : p)));
+    } catch (e) {
+      console.error(e);
+      alert('Failed to update patient');
+    }
   };
 
   // Delete Patient
-  const handleDeletePatient = (id: string) => {
-    setPatients(patients.filter((p) => p.id !== id));
-    // Also remove any booked sessions for them
-    setSchedule(schedule.filter((s) => s.patientId !== id));
+  const handleDeletePatient = async (id: string) => {
+    try {
+      const patient = patients.find(p => p.id === id);
+      if (patient?.rawId) {
+        await DataService.deletePatient(patient.rawId);
+      }
+      setPatients(patients.filter((p) => p.id !== id));
+    } catch (e) {
+      console.error(e);
+      alert('Failed to delete patient');
+    }
   };
 
-  // Add Schedule slot
-  const handleAddSchedule = (newSlot: Omit<ScheduleItem, 'id'>) => {
-    const fullSlot: ScheduleItem = {
-      ...newSlot,
-      id: `S-${Date.now()}`
-    };
-    setSchedule([...schedule, fullSlot]);
-  };
-
-  // Delete Schedule slot
-  const handleDeleteSchedule = (id: string) => {
-    setSchedule(schedule.filter((s) => s.id !== id));
-  };
 
   // Doctor modification
   const handleUpdateDoctor = (name: string, role: string, avatar: string) => {
@@ -274,7 +306,7 @@ export default function App() {
         {activeTab === 'dashboard' && (
           <DashboardView
             patients={patients}
-            schedule={schedule}
+            schedule={[]}
             recentSessions={recentSessions}
             dashboardStats={dashboardStats}
             isLoadingData={isLoadingData}
@@ -291,24 +323,20 @@ export default function App() {
         {activeTab === 'patients' && (
           <PatientsView
             patients={patients}
+            doctors={doctors}
             onAddPatient={handleAddPatient}
             onUpdatePatient={handleUpdatePatient}
             onDeletePatient={handleDeletePatient}
           />
         )}
 
+        {activeTab === 'doctors' && <DoctorsView />}
+
         {activeTab === 'programs' && <ProgramsView />}
 
         {activeTab === 'exercises' && <ExercisesView />}
 
-        {activeTab === 'sessions' && (
-          <SessionsView
-            schedule={schedule}
-            patients={patients}
-            onAddSchedule={handleAddSchedule}
-            onDeleteSchedule={handleDeleteSchedule}
-          />
-        )}
+        {activeTab === 'sessions' && <SessionsView />}
 
         {(activeTab === 'progress' || activeTab === 'analytics') && <AnalyticsView />}
 

@@ -3,12 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Activity, Dumbbell, Play, RotateCcw, Flame, CheckCircle, ShieldAlert } from 'lucide-react';
 import { EXERCISE_ITEMS } from '../mockData';
+import { DataService } from '../services/api';
+import { socketService } from '../services/socket';
 
 export default function ExercisesView() {
-  const [selectedExercise, setSelectedExercise] = useState(EXERCISE_ITEMS[0]);
+  const [exercises, setExercises] = useState<any[]>(EXERCISE_ITEMS);
+  const [selectedExercise, setSelectedExercise] = useState<any>(EXERCISE_ITEMS[0]);
   const [activeTab, setActiveTab] = useState<'details' | 'guide'>('details');
 
   // Interactive rep counter state
@@ -25,6 +28,50 @@ export default function ExercisesView() {
     setRepCount((prev) => prev + 1);
   };
 
+  const loadExercises = async () => {
+    try {
+      const res = await DataService.getExercises();
+      if (res && res.data && res.data.length > 0) {
+        const mapped = res.data.map((ex: any) => ({
+          id: ex.id,
+          name: ex.name,
+          category: 'Strength',
+          color: '#3b82f6',
+          description: ex.description,
+          targetMuscles: 'Quadriceps, Hamstrings',
+          sets: '3 sets of 10 reps',
+          frequency: 'Daily',
+          count: 0
+        }));
+        setExercises(mapped);
+        setSelectedExercise(mapped[0]);
+      }
+    } catch (error) {
+      console.error('Failed to load exercises', error);
+    }
+  };
+
+  useEffect(() => {
+    loadExercises();
+  }, []);
+
+  useEffect(() => {
+    const handleExerciseChange = () => {
+      console.log('Real-time exercise update received! Refreshing list...');
+      loadExercises();
+    };
+
+    socketService.on('exercise:created', handleExerciseChange);
+    socketService.on('exercise:updated', handleExerciseChange);
+    socketService.on('exercise:deleted', handleExerciseChange);
+
+    return () => {
+      socketService.off('exercise:created', handleExerciseChange);
+      socketService.off('exercise:updated', handleExerciseChange);
+      socketService.off('exercise:deleted', handleExerciseChange);
+    };
+  }, []);
+
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-6">
       <div>
@@ -37,8 +84,8 @@ export default function ExercisesView() {
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-sm p-4 space-y-3 lg:col-span-1">
           <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2 mb-1">Available Routines</h2>
           <div className="space-y-1">
-            {EXERCISE_ITEMS.map((ex) => {
-              const isSelected = selectedExercise.id === ex.id;
+            {exercises.map((ex) => {
+              const isSelected = selectedExercise?.id === ex.id;
               return (
                 <button
                   key={ex.id}
@@ -76,11 +123,13 @@ export default function ExercisesView() {
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
             {/* Header banner */}
+            {selectedExercise ? (
+              <>
             <div className="p-6 bg-slate-50/50 border-b border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div
                   className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-xs"
-                  style={{ backgroundColor: selectedExercise.color }}
+                  style={{ backgroundColor: selectedExercise.color || '#3b82f6' }}
                 >
                   <Dumbbell className="w-5 h-5" />
                 </div>
@@ -194,6 +243,10 @@ export default function ExercisesView() {
                 </div>
               )}
             </div>
+            </>
+            ) : (
+              <div className="p-10 text-center text-slate-500">No exercises found.</div>
+            )}
           </div>
 
           {/* Interactive Rep Logging Widget */}
@@ -220,7 +273,8 @@ export default function ExercisesView() {
               <div className="flex flex-col gap-2">
                 <button
                   onClick={triggerTrainingRep}
-                  className="px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  disabled={!selectedExercise}
+                  className="px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <Play className="w-3.5 h-3.5 fill-current" />
                   Perform Rep

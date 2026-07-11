@@ -20,6 +20,15 @@ export interface Patient {
   phone: string;
   joinDate: string;
   notes?: string;
+  rawId?: number;
+}
+
+export interface Doctor {
+  id: number;
+  name: string;
+  email: string;
+  specialization: string;
+  created_at?: string;
 }
 
 export interface ScheduleItem {
@@ -54,6 +63,7 @@ export interface MetricCardData {
 export type SidebarTab =
   | 'dashboard'
   | 'patients'
+  | 'doctors'
   | 'programs'
   | 'exercises'
   | 'sessions'
