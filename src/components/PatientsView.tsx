@@ -116,6 +116,10 @@ export default function PatientsView({
       alert('Please fill in Name, Condition and Program.');
       return;
     }
+    if (!formData.doctor_id) {
+      alert('Please select a doctor. A doctor must be assigned to every patient.');
+      return;
+    }
     onAddPatient({
       name: formData.name,
       email: formData.email || `${formData.name.toLowerCase().replace(/\s+/g, '')}@example.com`,
@@ -496,7 +500,7 @@ export default function PatientsView({
       {/* ADD PATIENT MODAL */}
       {isAddOpen && (
         <div className="fixed inset-0 bg-slate-900/45 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-150">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-xl max-w-lg w-full flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150">
             {/* Modal Header */}
             <div className="px-6 py-4.5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50">
               <h2 className="text-md font-bold text-slate-800 dark:text-slate-100">Enroll New Patient</h2>
@@ -509,7 +513,7 @@ export default function PatientsView({
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSubmitAdd} className="p-6 space-y-4">
+            <form onSubmit={handleSubmitAdd} className="p-6 space-y-4 overflow-y-auto flex-1">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Patient Full Name *</label>
@@ -602,7 +606,7 @@ export default function PatientsView({
                     onChange={(e) => setFormData({ ...formData, doctor_id: e.target.value })}
                     className="w-full px-3.5 py-2 text-sm border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/10 bg-white dark:bg-slate-800 transition-all"
                   >
-                    <option value="">No Doctor</option>
+                    <option value="" disabled>Select a Doctor</option>
                     {doctors.map(d => (
                       <option key={d.id} value={d.id}>{d.name}</option>
                     ))}
@@ -657,7 +661,7 @@ export default function PatientsView({
       {/* EDIT PATIENT MODAL */}
       {isEditOpen && (
         <div className="fixed inset-0 bg-slate-900/45 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-150">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-xl max-w-lg w-full flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150">
             {/* Modal Header */}
             <div className="px-6 py-4.5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50">
               <h2 className="text-md font-bold text-slate-800 dark:text-slate-100">Edit Patient Profile</h2>
@@ -673,7 +677,7 @@ export default function PatientsView({
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSubmitEdit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmitEdit} className="p-6 space-y-4 overflow-y-auto flex-1">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Patient Full Name *</label>

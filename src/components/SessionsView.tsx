@@ -4,11 +4,15 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Calendar, Plus, CheckCircle, XCircle, Clock, Trash2, X, User, Search } from 'lucide-react';
+import { Calendar, Plus, CheckCircle, XCircle, Clock, Trash2, X, User, Search, ActivitySquare } from 'lucide-react';
 import { DataService } from '../services/api';
 import { socketService } from '../services/socket';
 
-export default function SessionsView() {
+interface SessionsViewProps {
+  onLaunchLiveSession?: (sessionId: number) => void;
+}
+
+export default function SessionsView({ onLaunchLiveSession }: SessionsViewProps) {
   const [sessions, setSessions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -99,6 +103,11 @@ export default function SessionsView() {
     completed: { label: 'Completed', icon: CheckCircle, classes: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' },
     missed: { label: 'Missed', icon: XCircle, classes: 'bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-300' },
     pending: { label: 'Pending', icon: Clock, classes: 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' },
+    running: { label: 'Running', icon: ActivitySquare, classes: 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' },
+    paused: { label: 'Paused', icon: Clock, classes: 'bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' },
+    countdown: { label: 'Starting', icon: Clock, classes: 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' },
+    emergency_stop: { label: 'EMERGENCY', icon: XCircle, classes: 'bg-red-500 text-white' },
+    stopped: { label: 'Stopped', icon: XCircle, classes: 'bg-slate-50 dark:bg-slate-900/30 text-slate-700 dark:text-slate-300' }
   };
 
   const completedCount = sessions.filter((s: any) => s.status === 'completed').length;
@@ -204,10 +213,19 @@ export default function SessionsView() {
                         {s.date ? new Date(s.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                       </td>
                       <td className="px-5 py-3.5 text-right">
-                        <button onClick={() => handleDelete(s.id)} title="Delete"
-                          className="w-8 h-8 inline-flex items-center justify-center rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 text-red-500 transition-colors">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex justify-end gap-2">
+                          {onLaunchLiveSession && ['pending', 'countdown', 'running', 'paused', 'emergency_stop', 'stopped'].includes(s.status) && (
+                            <button onClick={() => onLaunchLiveSession(s.id)} title="Live Control"
+                              className="px-3 py-1.5 inline-flex items-center justify-center rounded-lg bg-cyan-100 hover:bg-cyan-200 text-cyan-700 text-xs font-semibold transition-colors">
+                              <ActivitySquare className="w-3.5 h-3.5 mr-1.5" />
+                              Live Control
+                            </button>
+                          )}
+                          <button onClick={() => handleDelete(s.id)} title="Delete"
+                            className="w-8 h-8 inline-flex items-center justify-center rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 text-red-500 transition-colors">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -221,14 +239,14 @@ export default function SessionsView() {
       {/* Create Modal */}
       {isAddOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md border border-slate-100 dark:border-slate-700">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md border border-slate-100 dark:border-slate-700 flex flex-col max-h-[90vh]">
             <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-700">
               <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">Log a Session</h2>
               <button onClick={() => setIsAddOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400">
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <form onSubmit={handleCreate} className="p-5 space-y-4">
+            <form onSubmit={handleCreate} className="p-5 space-y-4 overflow-y-auto flex-1">
               <div>
                 <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Patient *</label>
                 <select required value={form.patient_id} onChange={e => setForm(f => ({ ...f, patient_id: e.target.value }))}

@@ -27,7 +27,9 @@ import {
   Headphones,
   Info
 } from 'lucide-react';
-import { Patient, ScheduleItem, RecentSession, SidebarTab } from '../types';
+import { Patient, ScheduleItem, RecentSession, SidebarTab, Notification } from '../types';
+import { NotificationService } from '../services/api';
+import { socketService } from '../services/socket';
 
 interface DashboardViewProps {
   patients: Patient[];
@@ -74,8 +76,43 @@ export default function DashboardView({
   // Global search input state
   const [globalSearch, setGlobalSearch] = useState('');
 
-  // Dropdowns
+  // Dropdowns & Notifications
   const [notifsOpen, setNotifsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const loadNotifications = async () => {
+    try {
+      const [notifsRes, countRes] = await Promise.all([
+        NotificationService.getMyNotifications({ limit: 5 }),
+        NotificationService.getUnreadCount()
+      ]);
+      setNotifications(notifsRes?.data?.rows || []);
+      setUnreadCount(countRes?.data?.count || 0);
+    } catch (e) {
+      console.error('Failed to load notifications', e);
+    }
+  };
+
+  React.useEffect(() => {
+    loadNotifications();
+
+    const handleNewNotification = () => {
+      loadNotifications();
+    };
+
+    socketService.on('notification:created', handleNewNotification);
+    return () => {
+      socketService.off('notification:created', handleNewNotification);
+    };
+  }, []);
+
+  const handleMarkAllRead = async () => {
+    try {
+      await NotificationService.markAllRead();
+      loadNotifications();
+    } catch (e) {}
+  };
 
   // SVG Line Chart interactive hover day
   const [hoveredDayIdx, setHoveredDayIdx] = useState<number | null>(null);
@@ -190,30 +227,32 @@ export default function DashboardView({
               className="p-2.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-700 rounded-xl shadow-2xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:text-slate-100 transition-all relative cursor-pointer"
             >
               <Bell className="w-4.5 h-4.5" />
-              <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-red-500 text-[9px] font-bold text-white rounded-full flex items-center justify-center border border-white">
-                3
-              </span>
+              {unreadCount > 0 && (
+                <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-red-500 text-[9px] font-bold text-white rounded-full flex items-center justify-center border border-white">
+                  {unreadCount}
+                </span>
+              )}
             </button>
 
             {notifsOpen && (
               <div className="absolute right-0 mt-2.5 w-80 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-100 dark:border-slate-700 p-2 z-30 animate-in fade-in slide-in-from-top-2 duration-150">
                 <div className="px-3 py-2 border-b border-slate-50 flex justify-between items-center">
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Notifications</span>
-                  <span className="text-[10px] text-cyan-600 font-bold uppercase cursor-pointer hover:underline" onClick={() => alert('Notifications cleared')}>Mark all read</span>
+                  {unreadCount > 0 && (
+                    <button className="text-[10px] text-cyan-600 font-bold uppercase cursor-pointer hover:underline" onClick={handleMarkAllRead}>Mark all read</button>
+                  )}
                 </div>
                 <div className="space-y-1 py-1 max-h-60 overflow-y-auto">
-                  <div className="p-2.5 hover:bg-slate-50 dark:hover:bg-slate-700 dark:bg-slate-700/50 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors">
-                    <p className="text-slate-800 dark:text-slate-100">Youssef Ali checked in</p>
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">9:00 AM • Knee Rehab</span>
-                  </div>
-                  <div className="p-2.5 hover:bg-slate-50 dark:hover:bg-slate-700 dark:bg-slate-700/50 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors">
-                    <p className="text-slate-800 dark:text-slate-100">New Patient Enrolled: Jana Sherif</p>
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">Yesterday • Ankle Rehab</span>
-                  </div>
-                  <div className="p-2.5 hover:bg-slate-50 dark:hover:bg-slate-700 dark:bg-slate-700/50 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors">
-                    <p className="text-slate-800 dark:text-slate-100">Completed Sessions report ready</p>
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">May 11, 2024</span>
-                  </div>
+                  {notifications.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-slate-500">No notifications</div>
+                  ) : (
+                    notifications.map(n => (
+                      <div key={n.id} className={`p-2.5 rounded-lg text-xs font-semibold transition-colors ${n.read ? 'text-slate-600 hover:bg-slate-50' : 'bg-cyan-50 text-slate-800'}`}>
+                        <p className={n.read ? "text-slate-700 dark:text-slate-300" : "text-slate-900 dark:text-white"}>{n.title}</p>
+                        <span className="text-[10px] text-slate-400 mt-0.5 block">{n.body}</span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}

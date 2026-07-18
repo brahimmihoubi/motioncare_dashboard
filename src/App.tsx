@@ -15,6 +15,9 @@ import SessionsView from './components/SessionsView';
 import AnalyticsView from './components/AnalyticsView';
 import SupportCenterView from './components/SupportCenterView';
 import SettingsView from './components/SettingsView';
+import ExerciseRequestsView from './components/ExerciseRequestsView';
+import AuditLogsView from './components/AuditLogsView';
+import LiveSessionView from './components/LiveSessionView';
 import { SidebarTab, Patient, RecentSession } from './types';
 import LoginView from './components/LoginView';
 import { AuthService, DataService } from './services/api';
@@ -24,6 +27,7 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(AuthService.isAuthenticated());
   const [activeTab, setActiveTab] = useState<SidebarTab>('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [activeLiveSessionId, setActiveLiveSessionId] = useState<number | null>(null);
 
   // Theme state: 'light' | 'dark' — default is 'light'
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -179,34 +183,11 @@ export default function App() {
   const handleAddPatient = async (newPatient: any) => {
     try {
       await DataService.createPatient(newPatient);
-      // Refresh patients list after adding
-      const patientsRes = await DataService.getAdminPatients();
-      const rawPatients = Array.isArray(patientsRes?.data) ? patientsRes.data : [];
-      const avatars = [
-        'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=120&h=120',
-        'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=120&h=120',
-      ];
-      setPatients(rawPatients.map((p: any, idx: number) => ({
-        id: `MC-${String(p.id).padStart(5, '0')}`,
-        name: p.name || 'Unknown',
-        avatar: avatars[idx % avatars.length],
-        age: p.age || 0,
-        gender: 'Unknown',
-        condition: 'General Rehab',
-        program: 'Assigned',
-        lastSessionDate: 'N/A',
-        lastSessionTime: 'N/A',
-        status: 'Active',
-        email: p.email || '',
-        phone: 'N/A',
-        joinDate: p.created_at ? new Date(p.created_at).toLocaleDateString() : new Date().toLocaleDateString(),
-        notes: p.notes || '',
-        // store raw ID for API operations
-        rawId: p.id
-      })));
-    } catch (e) {
-      console.error(e);
-      alert('Failed to add patient');
+      // Refresh all data so the mappings are consistent
+      await loadDashboardData();
+    } catch (error: any) {
+      console.error('Failed to add patient', error);
+      alert(error.response?.data?.message || 'Failed to add patient. Email might already exist.');
     }
   };
 
@@ -336,7 +317,33 @@ export default function App() {
 
         {activeTab === 'exercises' && <ExercisesView />}
 
-        {activeTab === 'sessions' && <SessionsView />}
+        {activeTab === 'sessions' && (
+          <SessionsView 
+            onLaunchLiveSession={(id: number) => {
+              setActiveLiveSessionId(id);
+              setActiveTab('live-session');
+            }}
+          />
+        )}
+
+        {activeTab === 'live-session' && activeLiveSessionId !== null && (
+          <LiveSessionView 
+            sessionId={activeLiveSessionId}
+            onBack={() => {
+              setActiveLiveSessionId(null);
+              setActiveTab('sessions');
+            }}
+          />
+        )}
+
+        {activeTab === 'exercise-requests' && (
+          <ExerciseRequestsView 
+            // In a real app we'd get this from context/auth state, for MVP we can use admin by default
+            userRole={JSON.parse(localStorage.getItem('mc_admin_profile') || '{}').role || 'admin'} 
+          />
+        )}
+
+        {activeTab === 'audit-logs' && <AuditLogsView />}
 
         {(activeTab === 'progress' || activeTab === 'analytics') && <AnalyticsView />}
 

@@ -19,6 +19,8 @@ import {
   LogOut,
   User,
   X,
+  ClipboardList,
+  ShieldAlert,
 } from 'lucide-react';
 import { SidebarTab } from '../types';
 import motionCareLogo from '../assets/MotionCare_logo.png';
@@ -50,9 +52,11 @@ export default function Sidebar({
     { id: 'doctors'   as SidebarTab, label: 'Doctors',        icon: UserCog },
     { id: 'programs'  as SidebarTab, label: 'Programs',       icon: Briefcase },
     { id: 'exercises' as SidebarTab, label: 'Exercises',      icon: Activity },
+    { id: 'exercise-requests' as SidebarTab, label: 'Exercise Requests', icon: ClipboardList },
     { id: 'sessions'  as SidebarTab, label: 'Sessions',       icon: Calendar },
     { id: 'progress'  as SidebarTab, label: 'Progress',       icon: TrendingUp },
     { id: 'analytics' as SidebarTab, label: 'Analytics',      icon: BarChart2 },
+    { id: 'audit-logs' as SidebarTab, label: 'Audit Logs',    icon: ShieldAlert },
     { id: 'support'   as SidebarTab, label: 'Support Center', icon: LifeBuoy },
     { id: 'settings'  as SidebarTab, label: 'Settings',       icon: Settings },
   ];

@@ -15,16 +15,29 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Add a response interceptor to handle 401 errors globally
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      AuthService.logout();
+      window.location.reload(); // Force reload to trigger unauthenticated state
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const AuthService = {
   login: async (credentials: any) => {
     const response = await api.post('/auth/admin/login', credentials);
-    if (response.data.token) {
-      localStorage.setItem('mc_admin_token', response.data.token);
-      if (response.data.user) {
-         localStorage.setItem('mc_admin_profile', JSON.stringify(response.data.user));
+    const result = response.data;
+    if (result.success && result.data && result.data.token) {
+      localStorage.setItem('mc_admin_token', result.data.token);
+      if (result.data.user) {
+         localStorage.setItem('mc_admin_profile', JSON.stringify(result.data.user));
       }
     }
-    return response.data;
+    return result;
   },
   logout: () => {
     localStorage.removeItem('mc_admin_token');
@@ -132,6 +145,92 @@ export const DataService = {
   },
   deleteDoctor: async (id: number) => {
     const response = await api.delete(`/admin/doctors/${id}`);
+    return response.data;
+  }
+};
+
+export const ExerciseRequestService = {
+  // Doctor methods
+  createRequest: async (data: any) => {
+    const response = await api.post('/exercise-requests', data);
+    return response.data;
+  },
+  getMyRequests: async () => {
+    const response = await api.get('/exercise-requests/my');
+    return response.data;
+  },
+  // Admin methods
+  getAllRequests: async (params?: any) => {
+    const response = await api.get('/exercise-requests', { params });
+    return response.data;
+  },
+  getRequestById: async (id: number) => {
+    const response = await api.get(`/exercise-requests/${id}`);
+    return response.data;
+  },
+  updateRequestStatus: async (id: number, status: string, admin_notes?: string) => {
+    const response = await api.patch(`/exercise-requests/${id}/status`, { status, admin_notes });
+    return response.data;
+  }
+};
+
+export const NotificationService = {
+  getMyNotifications: async (params?: any) => {
+    const response = await api.get('/notifications', { params });
+    return response.data;
+  },
+  getUnreadCount: async () => {
+    const response = await api.get('/notifications/unread-count');
+    return response.data;
+  },
+  markRead: async (id: number) => {
+    const response = await api.patch(`/notifications/${id}/read`);
+    return response.data;
+  },
+  markAllRead: async () => {
+    const response = await api.post('/notifications/mark-all-read');
+    return response.data;
+  }
+};
+
+export const AuditLogService = {
+  getAllLogs: async (params?: any) => {
+    const response = await api.get('/audit-logs', { params });
+    return response.data;
+  }
+};
+
+export const ExoskeletonService = {
+  initSession: async (sessionId: number, total_duration_seconds: number = 0) => {
+    const response = await api.post(`/sessions/${sessionId}/exo/init`, { total_duration_seconds });
+    return response.data;
+  },
+  getState: async (sessionId: number) => {
+    const response = await api.get(`/sessions/${sessionId}/exo/state`);
+    return response.data;
+  },
+  start: async (sessionId: number) => {
+    const response = await api.post(`/sessions/${sessionId}/exo/start`);
+    return response.data;
+  },
+  pause: async (sessionId: number) => {
+    const response = await api.post(`/sessions/${sessionId}/exo/pause`);
+    return response.data;
+  },
+  resume: async (sessionId: number) => {
+    const response = await api.post(`/sessions/${sessionId}/exo/resume`);
+    return response.data;
+  },
+  stop: async (sessionId: number) => {
+    const response = await api.post(`/sessions/${sessionId}/exo/stop`);
+    return response.data;
+  },
+  emergencyStop: async (sessionId: number, reason?: string) => {
+    const response = await api.post(`/sessions/${sessionId}/exo/emergency-stop`, { reason });
+    return response.data;
+  },
+  setExercise: async (sessionId: number, exercise_id: number) => {
+    const response = await api.post(`/sessions/${sessionId}/exo/exercise`, { exercise_id });
     return response.data;
   }
 };
