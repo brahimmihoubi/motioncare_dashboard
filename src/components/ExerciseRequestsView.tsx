@@ -22,13 +22,16 @@ export default function ExerciseRequestsView({ userRole }: ExerciseRequestsViewP
   const loadRequests = async () => {
     setLoading(true);
     try {
-      let res;
+      let fetchedRequests: any[] = [];
+      let res: any;
       if (userRole === 'admin') {
         res = await ExerciseRequestService.getAllRequests();
+        fetchedRequests = res.rows || [];
       } else {
         res = await ExerciseRequestService.getMyRequests();
+        fetchedRequests = res.data || [];
       }
-      setRequests(res.data || []);
+      setRequests(fetchedRequests);
     } catch (e) {
       console.error(e);
     } finally {
@@ -142,7 +145,23 @@ export default function ExerciseRequestsView({ userRole }: ExerciseRequestsViewP
                     {req.patient_name || 'N/A'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="font-medium text-slate-800 dark:text-slate-200">{req.exercise_name || 'N/A'}</span>
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                          {req.name || req.exercise_name || 'N/A'}
+                        </span>
+                        {req.name && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                            Custom
+                          </span>
+                        )}
+                      </div>
+                      {(req.description || req.notes) && (
+                        <span className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-[250px] truncate" title={req.description || req.notes}>
+                          {req.description || req.notes}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {renderStatus(req.status)}

@@ -282,12 +282,7 @@ export default function PatientsView({
                       >
                         <td className="px-6 py-4.5">
                           <div className="flex items-center gap-3">
-                            <img
-                              src={patient.avatar}
-                              alt={patient.name}
-                              referrerPolicy="no-referrer"
-                              className="w-10 h-10 rounded-full object-cover border border-slate-100 dark:border-slate-700 bg-slate-100 dark:bg-slate-700"
-                            />
+
                             <div>
                               <div className="font-semibold text-slate-800 dark:text-slate-100 hover:text-cyan-600 cursor-pointer" onClick={() => setSelectedPatient(patient)}>
                                 {patient.name}

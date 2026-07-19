@@ -91,7 +91,7 @@ export default function Sidebar({
       </div>
 
       {/* ── Navigation Links ── */}
-      <nav className="flex-1 px-2 space-y-0.5 py-2 overflow-y-auto overflow-x-hidden">
+      <nav className="flex-1 px-2 space-y-0.5 py-2 overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
